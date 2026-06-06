@@ -4,8 +4,59 @@ import requests
 from bs4 import BeautifulSoup
 
 
+def _try_crypto_price_quote(query: str) -> str | None:
+    query_lower = query.lower()
+    if "bitcoin" not in query_lower and "btc" not in query_lower and "crypto" not in query_lower:
+        return None
+
+    if not any(keyword in query_lower for keyword in ("price", "current", "live", "today", "rate")):
+        return None
+
+    coin_id = "bitcoin"
+    coin_name = "Bitcoin"
+    if "ethereum" in query_lower or "eth" in query_lower:
+        coin_id = "ethereum"
+        coin_name = "Ethereum"
+
+    response = requests.get(
+        "https://api.coingecko.com/api/v3/simple/price",
+        params={
+            "ids": coin_id,
+            "vs_currencies": "usd",
+            "include_24hr_change": "true",
+        },
+        timeout=10,
+        headers={
+            "accept": "application/json",
+            "user-agent": "Mozilla/5.0",
+        },
+    )
+    response.raise_for_status()
+    payload = response.json()
+    price = payload.get(coin_id, {}).get("usd")
+    change_24h = payload.get(coin_id, {}).get("usd_24h_change")
+
+    if price is None:
+        return None
+
+    change_text = ""
+    if change_24h is not None:
+        change_text = f" (24h change: {change_24h:+.2f}%)"
+
+    return (
+        "Result 1:\n"
+        f"Title: {coin_name} live price\n"
+        f"Source: https://www.coingecko.com/en/coins/{coin_id}\n"
+        f"Summary: {coin_name} is currently ${price:,.2f} USD{change_text}."
+    )
+
+
 def web_search(query: str, max_results: int = 4) -> str:
     try:
+        crypto_quote = _try_crypto_price_quote(query)
+        if crypto_quote:
+            return crypto_quote
+
         response = requests.get(
             "https://html.duckduckgo.com/html/",
             params={"q": query},
